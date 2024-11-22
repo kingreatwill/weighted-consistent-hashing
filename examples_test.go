@@ -107,7 +107,7 @@ func TestRelocationPercentage(t *testing.T) {
 func TestSample(t *testing.T) {
 	// Create a new consistent instance
 	cfg := Config{
-		PartitionCount:    1,
+		PartitionCount:    2,
 		ReplicationFactor: 20,
 		Load:              1.25,
 		Hasher:            hasher{},
@@ -119,12 +119,18 @@ func TestSample(t *testing.T) {
 	node1 := testMember{"node1.olricmq.com", 1}
 	c.Add(node1)
 
-	node2 := testMember{"node100.olricmq.com", 100}
+	node2 := testMember{"node100.olricmq.com", 1}
 	c.Add(node2)
 
-	node1Count, node2Count := 0, 0
+	node3 := testMember{"node30.olricmq.com", 1}
+	c.Add(node3)
 
-	for i := 0; i <= 100; i++ {
+	mm, err := c.GetClosestN([]byte("my-key"), 3)
+	fmt.Println(mm, err)
+
+	node1Count, node2Count, node3Count := 0, 0, 0
+
+	for i := 0; i <= 100000; i++ {
 		key := []byte("my-key" + strconv.Itoa(i))
 		// calculates partition id for the given key
 		// partID := hash(key) % partitionCount
@@ -133,10 +139,12 @@ func TestSample(t *testing.T) {
 
 		if owner.String() == "node1.olricmq.com" {
 			node1Count++
-		} else {
+		} else if owner.String() == "node100.olricmq.com" {
 			node2Count++
+		} else {
+			node3Count++
 		}
 	}
-	fmt.Println(node1Count, node2Count)
+	fmt.Println(node1Count, node2Count, node3Count)
 
 }
