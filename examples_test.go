@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -15,7 +16,7 @@ func init() {
 func TestAddAndList(t *testing.T) {
 	members := []Member{}
 	for i := 0; i < 8; i++ {
-		member := testMember{fmt.Sprintf("node%d.olricmq", i), uint32(i + 1)}
+		member := testMember{fmt.Sprintf("node%d.olricmq", i), i + 1}
 		members = append(members, member)
 	}
 	cfg := Config{
@@ -38,7 +39,7 @@ func TestAddAndList(t *testing.T) {
 func TestLoadDistribution(t *testing.T) {
 	members := []Member{}
 	for i := 0; i < 8; i++ {
-		member := testMember{fmt.Sprintf("node%d.olricmq", i), uint32(i + 1)}
+		member := testMember{fmt.Sprintf("node%d.olricmq", i), i + 1}
 		members = append(members, member)
 	}
 	cfg := Config{
@@ -68,7 +69,7 @@ func TestRelocationPercentage(t *testing.T) {
 	// Create a new consistent instance.
 	members := []Member{}
 	for i := 0; i < 8; i++ {
-		member := testMember{fmt.Sprintf("node%d.olricmq", i), uint32(1)}
+		member := testMember{fmt.Sprintf("node%d.olricmq", i), 1}
 		members = append(members, member)
 	}
 	// Modify PartitionCount, ReplicationFactor and Load to increase or decrease
@@ -88,7 +89,7 @@ func TestRelocationPercentage(t *testing.T) {
 	}
 
 	// Add a new member
-	m := testMember{fmt.Sprintf("node%d.olricmq", 9), uint32(1)}
+	m := testMember{fmt.Sprintf("node%d.olricmq", 9), 1}
 	c.Add(m)
 
 	// Get the new layout and compare with the previous
@@ -106,7 +107,7 @@ func TestRelocationPercentage(t *testing.T) {
 func TestSample(t *testing.T) {
 	// Create a new consistent instance
 	cfg := Config{
-		PartitionCount:    7,
+		PartitionCount:    1,
 		ReplicationFactor: 20,
 		Load:              1.25,
 		Hasher:            hasher{},
@@ -115,17 +116,27 @@ func TestSample(t *testing.T) {
 
 	// Add some members to the consistent hash table.
 	// Add function calculates average load and distributes partitions over members
-	node1 := testMember{"node1.olricmq.com", uint32(1)}
+	node1 := testMember{"node1.olricmq.com", 1}
 	c.Add(node1)
 
-	node2 := testMember{"node100.olricmq.com", uint32(100)}
+	node2 := testMember{"node100.olricmq.com", 100}
 	c.Add(node2)
 
-	key := []byte("my-key")
-	// calculates partition id for the given key
-	// partID := hash(key) % partitionCount
-	// the partitions is already distributed among members by Add function.
-	owner := c.LocateKey(key)
-	fmt.Println(owner.String())
-	// Prints node100.olricmq.com
+	node1Count, node2Count := 0, 0
+
+	for i := 0; i <= 100; i++ {
+		key := []byte("my-key" + strconv.Itoa(i))
+		// calculates partition id for the given key
+		// partID := hash(key) % partitionCount
+		// the partitions is already distributed among members by Add function.
+		owner := c.LocateKey(key)
+
+		if owner.String() == "node1.olricmq.com" {
+			node1Count++
+		} else {
+			node2Count++
+		}
+	}
+	fmt.Println(node1Count, node2Count)
+
 }

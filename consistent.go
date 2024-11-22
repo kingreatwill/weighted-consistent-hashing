@@ -85,7 +85,7 @@ type Hasher interface {
 // Member interface represents a member in consistent hash ring.
 type Member interface {
 	String() string
-	Weight() uint32
+	Weight() int
 }
 
 // Config represents a structure to control consistent package.
@@ -95,7 +95,7 @@ type Config struct {
 
 	// Keys are distributed among partitions. Prime numbers are good to
 	// distribute keys uniformly. Select a big PartitionCount if you have
-	// too many keys.
+	// too many keys. 分区数需要大于member数量
 	PartitionCount int
 
 	// Members are replicated on consistent hash ring. This number means that a member
@@ -144,7 +144,7 @@ func New(members []Member, config Config) *Consistent {
 
 	c.hasher = config.Hasher
 	for _, member := range members {
-		c.add(member)
+		c.addStart(member, 0)
 	}
 	if members != nil {
 		c.distributePartitions()
@@ -226,8 +226,14 @@ func (c *Consistent) distributePartitions() {
 	c.loads = loads
 }
 
-func (c *Consistent) add(member Member) {
-	for i := 0; i < c.config.ReplicationFactor*int(member.Weight()); i++ {
+func (c *Consistent) addStart(member Member, weight int) {
+	if weight >= member.Weight() {
+		// 没有要新增的
+		return
+	}
+	repCount := c.config.ReplicationFactor * member.Weight()
+	startCount := c.config.ReplicationFactor * weight
+	for i := startCount; i < repCount; i++ {
 		key := []byte(fmt.Sprintf("%s%d", member.String(), i))
 		h := c.hasher.Sum64(key)
 		c.ring[h] = &member
@@ -246,11 +252,21 @@ func (c *Consistent) Add(member Member) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if _, ok := c.members[member.String()]; ok {
-		// We already have this member. Quit immediately.
-		return
+	oldMember, ok := c.members[member.String()]
+	if ok {
+		oldWeight := (*oldMember).Weight()
+		if oldWeight == member.Weight() {
+			// We already have this member. Quit immediately.
+			return
+		}
+		// 移除多余的部分
+		c.removeStart(member.String(), member.Weight())
+		// 添加新增的部分
+		c.addStart(member, oldWeight)
+	} else {
+		c.addStart(member, 0)
 	}
-	c.add(member)
+
 	c.distributePartitions()
 }
 
@@ -267,14 +283,21 @@ func (c *Consistent) delSlice(val uint64) {
 func (c *Consistent) Remove(name string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.removeStart(name, 0)
+}
 
+// Remove removes a member from the consistent hash circle.
+func (c *Consistent) removeStart(name string, weight int) {
 	member, ok := c.members[name]
 	if !ok {
 		// There is no member with that name. Quit immediately.
 		return
 	}
-
-	for i := 0; i < c.config.ReplicationFactor*int((*member).Weight()); i++ {
+	oldWeight := (*member).Weight()
+	if oldWeight <= weight {
+		return
+	}
+	for i := c.config.ReplicationFactor * weight; i < c.config.ReplicationFactor*oldWeight; i++ {
 		key := []byte(fmt.Sprintf("%s%d", name, i))
 		h := c.hasher.Sum64(key)
 		delete(c.ring, h)

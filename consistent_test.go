@@ -41,14 +41,14 @@ func newConfig() Config {
 
 type testMember struct {
 	member string
-	weight uint32
+	weight int
 }
 
 func (tm testMember) String() string {
 	return tm.member
 }
 
-func (tm testMember) Weight() uint32 {
+func (tm testMember) Weight() int {
 	return tm.weight
 }
 
