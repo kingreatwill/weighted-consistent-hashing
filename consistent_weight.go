@@ -25,13 +25,13 @@ var ErrEmptyCircle = errors.New("empty circle")
 
 type Member struct {
 	Name   string
-	Weight int
+	Weight float64
 }
 
 // Consistent holds the information about the members of the consistent hash circle.
 type Consistent struct {
 	circle           map[uint32]string
-	members          map[string]int
+	members          map[string]float64
 	sortedHashes     uints
 	NumberOfReplicas int
 	count            int64
@@ -43,11 +43,14 @@ type Consistent struct {
 // New creates a new Consistent object with a default setting of 20 replicas for each entry.
 //
 // To change the number of replicas, set NumberOfReplicas before adding entries.
-func New() *Consistent {
+func New(numberOfReplicas int) *Consistent {
+	if numberOfReplicas <= 0 {
+		numberOfReplicas = 20
+	}
 	c := new(Consistent)
-	c.NumberOfReplicas = 20
+	c.NumberOfReplicas = numberOfReplicas
 	c.circle = make(map[uint32]string)
-	c.members = make(map[string]int)
+	c.members = make(map[string]float64)
 	return c
 }
 
@@ -58,18 +61,18 @@ func (c *Consistent) eltKey(elt string, idx int) string {
 }
 
 // Add inserts a string element in the consistent hash.
-func (c *Consistent) Add(elt string, wgt int) {
+func (c *Consistent) Add(elt string, wgt float64) {
 	c.Lock()
 	defer c.Unlock()
 	c.add(elt, wgt)
 }
 
 // need c.Lock() before calling
-func (c *Consistent) add(elt string, wgt int) {
+func (c *Consistent) add(elt string, wgt float64) {
 	if _, ok := c.members[elt]; ok {
 		return
 	}
-	for i := 0; i < c.NumberOfReplicas*wgt; i++ {
+	for i := 0; i < int(float64(c.NumberOfReplicas)*wgt); i++ {
 		c.circle[c.hashKey(c.eltKey(elt, i))] = elt
 	}
 	c.members[elt] = wgt
@@ -90,7 +93,7 @@ func (c *Consistent) remove(elt string) {
 	if !ok {
 		return
 	}
-	for i := 0; i < c.NumberOfReplicas*wgt; i++ {
+	for i := 0; i < int(float64(c.NumberOfReplicas)*wgt); i++ {
 		delete(c.circle, c.hashKey(c.eltKey(elt, i)))
 	}
 	delete(c.members, elt)
@@ -99,14 +102,14 @@ func (c *Consistent) remove(elt string) {
 }
 
 // UpdateWeight update weight.
-func (c *Consistent) UpdateWeight(elt string, wgt int) {
+func (c *Consistent) UpdateWeight(elt string, wgt float64) {
 	c.Lock()
 	defer c.Unlock()
 	c.updateWeight(elt, wgt)
 }
 
 // need c.Lock() before calling
-func (c *Consistent) updateWeight(elt string, newWgt int) {
+func (c *Consistent) updateWeight(elt string, newWgt float64) {
 	oldWgt, ok := c.members[elt]
 	if !ok {
 		return
@@ -115,11 +118,11 @@ func (c *Consistent) updateWeight(elt string, newWgt int) {
 		return
 	}
 	if newWgt > oldWgt {
-		for i := c.NumberOfReplicas * oldWgt; i < c.NumberOfReplicas*newWgt; i++ {
+		for i := int(float64(c.NumberOfReplicas) * oldWgt); i < int(float64(c.NumberOfReplicas)*newWgt); i++ {
 			c.circle[c.hashKey(c.eltKey(elt, i))] = elt
 		}
 	} else {
-		for i := c.NumberOfReplicas * newWgt; i < c.NumberOfReplicas*oldWgt; i++ {
+		for i := int(float64(c.NumberOfReplicas) * newWgt); i < int(float64(c.NumberOfReplicas)*oldWgt); i++ {
 			delete(c.circle, c.hashKey(c.eltKey(elt, i)))
 		}
 	}
@@ -129,7 +132,7 @@ func (c *Consistent) updateWeight(elt string, newWgt int) {
 
 // Set sets all the elements in the hash.  If there are existing elements not
 // present in elts, they will be removed.
-func (c *Consistent) Set(eltMap map[string]int) {
+func (c *Consistent) Set(eltMap map[string]float64) {
 	c.Lock()
 	defer c.Unlock()
 	for elt, wgt := range c.members {
@@ -228,7 +231,7 @@ func (c *Consistent) GetN(name string, n int) ([]string, error) {
 	defer c.RUnlock()
 
 	if len(c.circle) == 0 {
-		return nil, ErrEmptyCircle
+		return nil, nil
 	}
 
 	if c.count < int64(n) {
@@ -263,6 +266,11 @@ func (c *Consistent) GetN(name string, n int) ([]string, error) {
 	}
 
 	return res, nil
+}
+
+// GetAll returns the N closest distinct elements to the name input in the circle.
+func (c *Consistent) GetAll(name string) ([]string, error) {
+	return c.GetN(name, int(c.count))
 }
 
 func (c *Consistent) hashKey(key string) uint32 {
